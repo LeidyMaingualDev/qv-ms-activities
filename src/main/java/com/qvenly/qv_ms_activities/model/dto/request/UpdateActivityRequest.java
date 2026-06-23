@@ -9,4 +9,6 @@ public class UpdateActivityRequest {
     private String location;
     private LocalDateTime startDatetime;
     private LocalDateTime endDatetime;
+    private Boolean enrollmentEnabled;
+    private Integer maxEnrollment;
 }

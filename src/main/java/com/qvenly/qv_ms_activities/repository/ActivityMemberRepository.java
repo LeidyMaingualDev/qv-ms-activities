@@ -12,4 +12,5 @@ public interface ActivityMemberRepository extends JpaRepository<ActivityMember, 
     Optional<ActivityMember> findByActivityIdAndUserEmailAndEventRole(Long activityId, String userEmail, ActivityMemberRole role);
     boolean existsByActivityIdAndUserEmailAndStatus(Long activityId, String userEmail, MemberStatus status);
     long countByActivityIdAndEventRoleAndStatus(Long activityId, ActivityMemberRole role, MemberStatus status);
+    List<ActivityMember> findByUserEmailAndEventRoleAndStatus(String userEmail, ActivityMemberRole eventRole, MemberStatus status);
 }

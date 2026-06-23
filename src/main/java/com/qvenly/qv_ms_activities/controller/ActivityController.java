@@ -4,8 +4,10 @@ import com.qvenly.qv_ms_activities.model.dto.request.CancelActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.CreateActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.UpdateActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.response.ActivityResponse;
+import com.qvenly.qv_ms_activities.model.dto.response.AgendaItemResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ApiResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AuditLogResponse;
+import com.qvenly.qv_ms_activities.service.ActivityMemberService;
 import com.qvenly.qv_ms_activities.service.ActivityService;
 import com.qvenly.qv_ms_activities.service.AuditService;
 import jakarta.validation.Valid;
@@ -22,6 +24,8 @@ public class ActivityController {
 
     private final ActivityService activityService;
     private final AuditService auditService;
+
+    private final ActivityMemberService activityMemberService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ActivityResponse>> create(
@@ -72,5 +76,18 @@ public class ActivityController {
     @GetMapping("/{id}/audit")
     public ResponseEntity<ApiResponse<List<AuditLogResponse>>> getAudit(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success("Auditoría obtenida.", auditService.getAuditLog(id)));
+    }
+
+    @GetMapping("/my-enrollments")
+    public ResponseEntity<ApiResponse<List<ActivityResponse>>> getMyEnrollments(
+            @RequestHeader("X-User-Email") String userEmail) {
+        return ResponseEntity.ok(ApiResponse.success("Actividades inscritas obtenidas.",
+                activityMemberService.getMyEnrollments(userEmail)));
+    }
+
+    @GetMapping("/my-agenda")
+    public ResponseEntity<ApiResponse<List<AgendaItemResponse>>> getMyAgenda(
+            @RequestHeader("X-User-Email") String userEmail) {
+        return ResponseEntity.ok(ApiResponse.success("Agenda obtenida.", activityMemberService.getMyAgenda(userEmail)));
     }
 }

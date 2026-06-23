@@ -16,4 +16,6 @@ public class CreateActivityRequest {
     private LocalDateTime startDatetime;
     @NotNull(message = "La fecha de fin es obligatoria")
     private LocalDateTime endDatetime;
+    private Boolean enrollmentEnabled;
+    private Integer maxEnrollment;
 }

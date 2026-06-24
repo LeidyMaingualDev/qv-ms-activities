@@ -8,17 +8,25 @@ import com.qvenly.qv_ms_activities.model.dto.request.CreateActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.UpdateActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.response.ActivityResponse;
 import com.qvenly.qv_ms_activities.model.entity.Activity;
+import com.qvenly.qv_ms_activities.model.enums.ActivityMemberRole;
 import com.qvenly.qv_ms_activities.model.enums.ActivityStatus;
 import com.qvenly.qv_ms_activities.model.enums.AuditActionType;
+import com.qvenly.qv_ms_activities.model.enums.MemberStatus;
 import com.qvenly.qv_ms_activities.repository.ActivityMemberRepository;
 import com.qvenly.qv_ms_activities.repository.ActivityRepository;
+import com.qvenly.qv_ms_activities.specification.ActivitySpecification;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import java.time.LocalDate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @Slf4j
@@ -40,12 +48,20 @@ public class ActivityService {
             throw new BusinessException("La fecha de fin debe ser posterior a la fecha de inicio.", HttpStatus.BAD_REQUEST);
         }
         assertWithinEventDates(req.getEventId(), req.getStartDatetime(), req.getEndDatetime());
+
+        if (Boolean.TRUE.equals(req.getEnrollmentEnabled()) && req.getMaxEnrollment() != null && req.getMaxEnrollment() < 1) {
+            throw new BusinessException("El número máximo de asistentes debe ser mayor a cero.", HttpStatus.BAD_REQUEST);
+        }
+
         Activity a = new Activity();
         a.setEventId(req.getEventId()); a.setTitle(req.getTitle());
         a.setDescription(req.getDescription()); a.setLocation(req.getLocation());
         a.setStartDatetime(req.getStartDatetime()); a.setEndDatetime(req.getEndDatetime());
         a.setStatus(ActivityStatus.PENDING);
         a.setCreatedByEmail(performerEmail);
+        a.setEnrollmentEnabled(Boolean.TRUE.equals(req.getEnrollmentEnabled()));
+        a.setMaxAttendees(req.getMaxEnrollment());
+
         Activity saved = activityRepository.save(a);
         auditService.log(saved.getId(), saved.getEventId(), AuditActionType.ACTIVITY_CREATED,
                 performerEmail, null, "Actividad '" + saved.getTitle() + "' creada.");
@@ -63,6 +79,23 @@ public class ActivityService {
         if (req.getLocation() != null) a.setLocation(req.getLocation());
         if (req.getStartDatetime() != null) a.setStartDatetime(req.getStartDatetime());
         if (req.getEndDatetime() != null) a.setEndDatetime(req.getEndDatetime());
+
+        if (req.getEnrollmentEnabled() != null) a.setEnrollmentEnabled(req.getEnrollmentEnabled());
+
+        if (req.getMaxEnrollment() != null) {
+            if (req.getMaxEnrollment() < 1) {
+                throw new BusinessException("El número máximo de asistentes debe ser mayor a cero.", HttpStatus.BAD_REQUEST);
+            }
+            long currentAttendees = memberRepository.countByActivityIdAndEventRoleAndStatus(
+                    id, ActivityMemberRole.ATTENDEE, MemberStatus.ACTIVE);
+            if (req.getMaxEnrollment() < currentAttendees) {
+                throw new BusinessException(
+                        "No puedes bajar el cupo a " + req.getMaxEnrollment() + ", ya hay " + currentAttendees + " asistentes inscritos.",
+                        HttpStatus.CONFLICT);
+            }
+            a.setMaxAttendees(req.getMaxEnrollment());
+        }
+
         if (a.getEndDatetime() != null && a.getStartDatetime() != null
                 && !a.getEndDatetime().isAfter(a.getStartDatetime())) {
             throw new BusinessException("La fecha de fin debe ser posterior a la fecha de inicio.", HttpStatus.BAD_REQUEST);
@@ -118,8 +151,13 @@ public class ActivityService {
         return toResponse(updated);
     }
 
-    public List<ActivityResponse> getActivitiesByEvent(Long eventId) {
-        return activityRepository.findByEventIdOrderByStartDatetimeAsc(eventId)
+    public List<ActivityResponse> getActivitiesByEvent(Long eventId, String name, LocalDate date, ActivityStatus status) {
+        Specification<Activity> spec = Specification.where(ActivitySpecification.hasEventId(eventId))
+                .and(ActivitySpecification.hasName(name))
+                .and(ActivitySpecification.hasStatus(status))
+                .and(ActivitySpecification.onDate(date));
+
+        return activityRepository.findAll(spec, Sort.by("startDatetime").ascending())
                 .stream().map(this::toResponse).toList();
     }
 
@@ -157,6 +195,10 @@ public class ActivityService {
         r.setStartDatetime(a.getStartDatetime()); r.setEndDatetime(a.getEndDatetime());
         r.setStatus(a.getStatus()); r.setCancelReason(a.getCancelReason());
         r.setCreatedByEmail(a.getCreatedByEmail()); r.setCreatedAt(a.getCreatedAt()); r.setUpdatedAt(a.getUpdatedAt());
+        r.setEnrollmentEnabled(a.getEnrollmentEnabled());
+        r.setMaxEnrollment(a.getMaxAttendees());
+        r.setCurrentEnrollments((int) memberRepository.countByActivityIdAndEventRoleAndStatus(
+                a.getId(), ActivityMemberRole.ATTENDEE, MemberStatus.ACTIVE));
         return r;
     }
 }

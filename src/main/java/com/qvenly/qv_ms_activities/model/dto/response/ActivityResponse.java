@@ -12,6 +12,9 @@ public class ActivityResponse {
     private String location;
     private LocalDateTime startDatetime;
     private LocalDateTime endDatetime;
+    private Boolean enrollmentEnabled;
+    private Integer maxEnrollment;
+    private Integer currentEnrollments;
     private ActivityStatus status;
     private String cancelReason;
     private String createdByEmail;

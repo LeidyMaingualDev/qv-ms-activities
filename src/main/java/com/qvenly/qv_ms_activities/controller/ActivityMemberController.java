@@ -4,6 +4,7 @@ import com.qvenly.qv_ms_activities.model.dto.request.AssignMemberRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.CancelParticipationRequest;
 import com.qvenly.qv_ms_activities.model.dto.response.ActivityMemberResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ApiResponse;
+import com.qvenly.qv_ms_activities.model.enums.ActivityMemberRole;
 import com.qvenly.qv_ms_activities.service.ActivityMemberService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,8 +21,14 @@ public class ActivityMemberController {
     private final ActivityMemberService memberService;
 
     @GetMapping("/members")
-    public ResponseEntity<ApiResponse<List<ActivityMemberResponse>>> getMembers(@PathVariable Long activityId) {
-        return ResponseEntity.ok(ApiResponse.success("Miembros obtenidos.", memberService.getMembersByActivity(activityId)));
+    public ResponseEntity<ApiResponse<List<ActivityMemberResponse>>> getMembers(
+            @PathVariable Long activityId,
+            @RequestParam(required = false) ActivityMemberRole role) {
+        List<ActivityMemberResponse> members = memberService.getMembersByActivity(activityId);
+        if (role != null) {
+            members = members.stream().filter(m -> m.getEventRole() == role).toList();
+        }
+        return ResponseEntity.ok(ApiResponse.success("Miembros obtenidos.", members));
     }
 
     @PostMapping("/members")
@@ -54,4 +61,13 @@ public class ActivityMemberController {
             @RequestHeader("X-User-Email") String userEmail) {
         return ResponseEntity.ok(ApiResponse.success("Participación cancelada.", memberService.cancelParticipation(activityId, userEmail, request)));
     }
+
+    @PostMapping("/enroll")
+    public ResponseEntity<ApiResponse<ActivityMemberResponse>> enroll(
+            @PathVariable Long activityId,
+            @RequestHeader("X-User-Email") String userEmail) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Inscripción realizada.", memberService.enrollSelf(activityId, userEmail)));
+    }
+
 }

@@ -3,11 +3,13 @@ package com.qvenly.qv_ms_activities.controller;
 import com.qvenly.qv_ms_activities.model.dto.request.CancelActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.CreateActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.UpdateActivityRequest;
+import com.qvenly.qv_ms_activities.model.dto.response.ActivityImageResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ActivityResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AgendaItemResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ApiResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AuditLogResponse;
 import com.qvenly.qv_ms_activities.model.enums.ActivityStatus;
+import com.qvenly.qv_ms_activities.service.ActivityImageService;
 import com.qvenly.qv_ms_activities.service.ActivityMemberService;
 import com.qvenly.qv_ms_activities.service.ActivityService;
 import com.qvenly.qv_ms_activities.service.AuditService;
@@ -17,6 +19,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -28,6 +31,7 @@ public class ActivityController {
 
     private final ActivityService activityService;
     private final AuditService auditService;
+    private final ActivityImageService activityImageService;
 
     private final ActivityMemberService activityMemberService;
 
@@ -103,5 +107,29 @@ public class ActivityController {
             @RequestParam(required = false) ActivityStatus status) {
         return ResponseEntity.ok(ApiResponse.success("Agenda obtenida.",
                 activityMemberService.getMyAgenda(userEmail, name, eventId, date, status)));
+    }
+
+    @PostMapping("/{id}/images")
+    public ResponseEntity<ApiResponse<ActivityImageResponse>> uploadImage(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Imagen subida exitosamente.",
+                        activityImageService.uploadImage(id, file)));
+    }
+
+    @GetMapping("/{id}/images")
+    public ResponseEntity<ApiResponse<List<ActivityImageResponse>>> getImages(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success("Imágenes obtenidas.",
+                activityImageService.getImagesByActivity(id)));
+    }
+
+    @DeleteMapping("/{id}/images/{imageId}")
+    public ResponseEntity<ApiResponse<Void>> deleteImage(
+            @PathVariable Long id,
+            @PathVariable Long imageId) {
+        activityImageService.deleteImage(id, imageId);
+        return ResponseEntity.ok(ApiResponse.success("Imagen eliminada.", null));
     }
 }

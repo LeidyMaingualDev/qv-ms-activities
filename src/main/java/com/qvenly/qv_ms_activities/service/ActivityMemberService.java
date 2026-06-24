@@ -164,7 +164,7 @@ public class ActivityMemberService {
         r.setRespondedAt(m.getRespondedAt());
         return r;
     }
-}
+
 
     @Transactional
     public ActivityMemberResponse enrollSelf(Long activityId, String userEmail) {

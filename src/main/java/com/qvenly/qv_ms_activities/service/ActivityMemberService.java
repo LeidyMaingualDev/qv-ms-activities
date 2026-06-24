@@ -39,12 +39,19 @@ public class ActivityMemberService {
     private final ActivityService activityService;
     private final AuditService auditService;
     private final NotificationClient notificationClient;
+    private final EventAuthorizationService eventAuthorizationService;
     private final EventClientService eventClientService;
     private final ActivityRepository activityRepository;
 
     @Transactional
     public ActivityMemberResponse assignMember(Long activityId, AssignMemberRequest req, String performerEmail) {
         Activity activity = activityService.findById(activityId);
+
+        // Solo el organizador del evento puede asignar miembros.
+        eventAuthorizationService.assertIsOrganizer(activity.getEventId(), performerEmail);
+        // La persona a asignar debe poder recibir ese rol según su rol en el evento.
+        eventAuthorizationService.assertAssignableRole(activity.getEventId(), req.getUserEmail(), req.getEventRole());
+
         if (activity.getStatus() == com.qvenly.qv_ms_activities.model.enums.ActivityStatus.FINISHED
                 || activity.getStatus() == com.qvenly.qv_ms_activities.model.enums.ActivityStatus.CANCELLED) {
             throw new BusinessException("No se puede asignar miembros a una actividad " + activity.getStatus(), HttpStatus.CONFLICT);
@@ -82,10 +89,13 @@ public class ActivityMemberService {
     @Transactional
     public void removeMember(Long activityId, Long memberId, String performerEmail) {
         ActivityMember m = findActiveMember(memberId, activityId);
-        m.setStatus(MemberStatus.CANCELLED);
-        m.setRespondedAt(LocalDateTime.now());
-        memberRepository.save(m);
         Activity activity = activityService.findById(activityId);
+
+        // Solo el organizador del evento puede remover miembros de una actividad.
+        eventAuthorizationService.assertIsOrganizer(activity.getEventId(), performerEmail);
+
+        m.setStatus(MemberStatus.CANCELLED); m.setRespondedAt(LocalDateTime.now());
+        memberRepository.save(m);
         auditService.log(activityId, activity.getEventId(), AuditActionType.MEMBER_REMOVED,
                 performerEmail, null, "Miembro " + m.getUserEmail() + " removido.");
     }
@@ -154,6 +164,7 @@ public class ActivityMemberService {
         r.setRespondedAt(m.getRespondedAt());
         return r;
     }
+}
 
     @Transactional
     public ActivityMemberResponse enrollSelf(Long activityId, String userEmail) {
@@ -188,7 +199,6 @@ public class ActivityMemberService {
         m.setUserEmail(userEmail);
         m.setEventRole(ActivityMemberRole.ATTENDEE);
         m.setStatus(MemberStatus.ACTIVE);
-        // Se autoinscribe, no necesita confirmación posterior (a diferencia de una asignación)
         m.setConfirmationStatus(ConfirmationStatus.CONFIRMED);
         m.setRespondedAt(LocalDateTime.now());
         ActivityMember saved = memberRepository.save(m);
@@ -205,10 +215,6 @@ public class ActivityMemberService {
         return toResponse(saved);
     }
 
-    /**
-     * Valida que la actividad a inscribir no choque de horario con otra
-     * actividad activa (asignada o inscrita) del mismo usuario (RF101).
-     */
     private void checkScheduleConflict(String userEmail, Activity newActivity) {
         List<ActivityMember> existing = memberRepository.findByUserEmailAndStatus(userEmail, MemberStatus.ACTIVE);
         for (ActivityMember m : existing) {
@@ -223,9 +229,6 @@ public class ActivityMemberService {
         }
     }
 
-    /**
-     * Retorna las actividades en las que el usuario está inscrito como asistente (RF103).
-     */
     public List<ActivityResponse> getMyEnrollments(String userEmail) {
         return memberRepository.findByUserEmailAndEventRoleAndStatus(
                         userEmail, ActivityMemberRole.ATTENDEE, MemberStatus.ACTIVE)
@@ -234,11 +237,6 @@ public class ActivityMemberService {
                 .toList();
     }
 
-    /**
-     * Retorna la agenda completa del usuario: todas las actividades en las que
-     * tiene algún rol (STAFF, JUDGE, PARTICIPANT, ATTENDEE), sin importar
-     * si fue asignado por el organizador o se inscribió por sí mismo.
-     */
     public List<AgendaItemResponse> getMyAgenda(String userEmail, String name, Long eventId, LocalDate date, ActivityStatus status) {
         List<ActivityMember> members = memberRepository.findByUserEmailAndStatus(userEmail, MemberStatus.ACTIVE);
 
@@ -246,7 +244,6 @@ public class ActivityMemberService {
             return List.of();
         }
 
-        // Mapa activityId -> member, para reconstruir el rol y estado de confirmación después
         Map<Long, ActivityMember> memberByActivityId = members.stream()
                 .collect(Collectors.toMap(ActivityMember::getActivityId, m -> m));
 

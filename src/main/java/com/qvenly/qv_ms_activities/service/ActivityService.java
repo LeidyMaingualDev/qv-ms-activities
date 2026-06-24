@@ -1,6 +1,7 @@
 package com.qvenly.qv_ms_activities.service;
 
 import com.qvenly.qv_ms_activities.client.NotificationClient;
+import com.qvenly.qv_ms_activities.client.EventInternalClient;
 import com.qvenly.qv_ms_activities.exception.BusinessException;
 import com.qvenly.qv_ms_activities.model.dto.request.CancelActivityRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.CreateActivityRequest;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -28,12 +30,16 @@ public class ActivityService {
     private final AuditService auditService;
     private final NotificationClient notificationClient;
     private final ActivityMemberRepository memberRepository;
+    private final EventAuthorizationService eventAuthorizationService;
+    private final EventInternalClient eventInternalClient;
 
     @Transactional
     public ActivityResponse createActivity(CreateActivityRequest req, String performerEmail) {
+        eventAuthorizationService.assertIsOrganizer(req.getEventId(), performerEmail);
         if (!req.getEndDatetime().isAfter(req.getStartDatetime())) {
             throw new BusinessException("La fecha de fin debe ser posterior a la fecha de inicio.", HttpStatus.BAD_REQUEST);
         }
+        assertWithinEventDates(req.getEventId(), req.getStartDatetime(), req.getEndDatetime());
         Activity a = new Activity();
         a.setEventId(req.getEventId()); a.setTitle(req.getTitle());
         a.setDescription(req.getDescription()); a.setLocation(req.getLocation());
@@ -49,6 +55,7 @@ public class ActivityService {
     @Transactional
     public ActivityResponse updateActivity(Long id, UpdateActivityRequest req, String performerEmail) {
         Activity a = findById(id);
+        eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
         assertEditable(a);
         String before = "título='" + a.getTitle() + "'";
         if (req.getTitle() != null) a.setTitle(req.getTitle());
@@ -60,6 +67,7 @@ public class ActivityService {
                 && !a.getEndDatetime().isAfter(a.getStartDatetime())) {
             throw new BusinessException("La fecha de fin debe ser posterior a la fecha de inicio.", HttpStatus.BAD_REQUEST);
         }
+        assertWithinEventDates(a.getEventId(), a.getStartDatetime(), a.getEndDatetime());
         Activity updated = activityRepository.save(a);
         auditService.log(id, a.getEventId(), AuditActionType.ACTIVITY_EDITED, performerEmail, null,
                 "Antes: " + before + " | Después: título='" + updated.getTitle() + "'");
@@ -69,6 +77,7 @@ public class ActivityService {
     @Transactional
     public ActivityResponse startActivity(Long id, String performerEmail) {
         Activity a = findById(id);
+        eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
         if (a.getStatus() != ActivityStatus.PENDING) {
             throw new BusinessException("Solo se puede iniciar una actividad PENDING.", HttpStatus.CONFLICT);
         }
@@ -81,6 +90,7 @@ public class ActivityService {
     @Transactional
     public ActivityResponse finishActivity(Long id, String performerEmail) {
         Activity a = findById(id);
+        eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
         if (a.getStatus() != ActivityStatus.IN_PROGRESS) {
             throw new BusinessException("Solo se puede finalizar una actividad IN_PROGRESS.", HttpStatus.CONFLICT);
         }
@@ -93,6 +103,7 @@ public class ActivityService {
     @Transactional
     public ActivityResponse cancelActivity(Long id, CancelActivityRequest req, String performerEmail) {
         Activity a = findById(id);
+        eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
         assertEditable(a);
         a.setStatus(ActivityStatus.CANCELLED); a.setCancelReason(req.getCancelReason());
         Activity updated = activityRepository.save(a);
@@ -122,6 +133,20 @@ public class ActivityService {
     private void assertEditable(Activity a) {
         if (a.getStatus() == ActivityStatus.FINISHED || a.getStatus() == ActivityStatus.CANCELLED) {
             throw new BusinessException("No se puede modificar una actividad en estado " + a.getStatus(), HttpStatus.CONFLICT);
+        }
+    }
+
+    /**
+     * Valida que la actividad caiga completamente dentro del rango de fechas del evento.
+     * Consulta las fechas del evento vía cliente interno (fail-closed).
+     */
+    private void assertWithinEventDates(Long eventId, LocalDateTime activityStart, LocalDateTime activityEnd) {
+        EventInternalClient.EventDates ev = eventInternalClient.getEventDates(eventId);
+        if (activityStart.isBefore(ev.startDatetime()) || activityEnd.isAfter(ev.endDatetime())) {
+            throw new BusinessException(
+                    String.format("La actividad debe estar dentro del rango del evento (%s a %s).",
+                            ev.startDatetime(), ev.endDatetime()),
+                    HttpStatus.UNPROCESSABLE_ENTITY);
         }
     }
 

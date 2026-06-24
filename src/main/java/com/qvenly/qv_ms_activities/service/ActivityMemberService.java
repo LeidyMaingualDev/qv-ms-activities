@@ -30,10 +30,17 @@ public class ActivityMemberService {
     private final ActivityService activityService;
     private final AuditService auditService;
     private final NotificationClient notificationClient;
+    private final EventAuthorizationService eventAuthorizationService;
 
     @Transactional
     public ActivityMemberResponse assignMember(Long activityId, AssignMemberRequest req, String performerEmail) {
         Activity activity = activityService.findById(activityId);
+
+        // Solo el organizador del evento puede asignar miembros.
+        eventAuthorizationService.assertIsOrganizer(activity.getEventId(), performerEmail);
+        // La persona a asignar debe poder recibir ese rol según su rol en el evento.
+        eventAuthorizationService.assertAssignableRole(activity.getEventId(), req.getUserEmail(), req.getEventRole());
+
         if (activity.getStatus() == com.qvenly.qv_ms_activities.model.enums.ActivityStatus.FINISHED
                 || activity.getStatus() == com.qvenly.qv_ms_activities.model.enums.ActivityStatus.CANCELLED) {
             throw new BusinessException("No se puede asignar miembros a una actividad " + activity.getStatus(), HttpStatus.CONFLICT);
@@ -68,9 +75,13 @@ public class ActivityMemberService {
     @Transactional
     public void removeMember(Long activityId, Long memberId, String performerEmail) {
         ActivityMember m = findActiveMember(memberId, activityId);
+        Activity activity = activityService.findById(activityId);
+
+        // Solo el organizador del evento puede remover miembros de una actividad.
+        eventAuthorizationService.assertIsOrganizer(activity.getEventId(), performerEmail);
+
         m.setStatus(MemberStatus.CANCELLED); m.setRespondedAt(LocalDateTime.now());
         memberRepository.save(m);
-        Activity activity = activityService.findById(activityId);
         auditService.log(activityId, activity.getEventId(), AuditActionType.MEMBER_REMOVED,
                 performerEmail, null, "Miembro " + m.getUserEmail() + " removido.");
     }

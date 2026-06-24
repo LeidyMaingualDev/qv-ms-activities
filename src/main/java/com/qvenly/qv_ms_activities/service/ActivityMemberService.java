@@ -10,19 +10,25 @@ import com.qvenly.qv_ms_activities.model.dto.response.ActivityResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AgendaItemResponse;
 import com.qvenly.qv_ms_activities.model.entity.Activity;
 import com.qvenly.qv_ms_activities.model.entity.ActivityMember;
-import com.qvenly.qv_ms_activities.model.enums.ActivityMemberRole;
-import com.qvenly.qv_ms_activities.model.enums.AuditActionType;
-import com.qvenly.qv_ms_activities.model.enums.ConfirmationStatus;
-import com.qvenly.qv_ms_activities.model.enums.MemberStatus;
+import com.qvenly.qv_ms_activities.model.enums.*;
 import com.qvenly.qv_ms_activities.repository.ActivityMemberRepository;
+import com.qvenly.qv_ms_activities.repository.ActivityRepository;
+import com.qvenly.qv_ms_activities.specification.ActivitySpecification;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,6 +40,7 @@ public class ActivityMemberService {
     private final AuditService auditService;
     private final NotificationClient notificationClient;
     private final EventClientService eventClientService;
+    private final ActivityRepository activityRepository;
 
     @Transactional
     public ActivityMemberResponse assignMember(Long activityId, AssignMemberRequest req, String performerEmail) {
@@ -232,11 +239,30 @@ public class ActivityMemberService {
      * tiene algún rol (STAFF, JUDGE, PARTICIPANT, ATTENDEE), sin importar
      * si fue asignado por el organizador o se inscribió por sí mismo.
      */
-    public List<AgendaItemResponse> getMyAgenda(String userEmail) {
-        return memberRepository.findByUserEmailAndStatus(userEmail, MemberStatus.ACTIVE)
-                .stream()
-                .map(m -> {
-                    Activity activity = activityService.findById(m.getActivityId());
+    public List<AgendaItemResponse> getMyAgenda(String userEmail, String name, Long eventId, LocalDate date, ActivityStatus status) {
+        List<ActivityMember> members = memberRepository.findByUserEmailAndStatus(userEmail, MemberStatus.ACTIVE);
+
+        if (members.isEmpty()) {
+            return List.of();
+        }
+
+        // Mapa activityId -> member, para reconstruir el rol y estado de confirmación después
+        Map<Long, ActivityMember> memberByActivityId = members.stream()
+                .collect(Collectors.toMap(ActivityMember::getActivityId, m -> m));
+
+        List<Long> activityIds = new ArrayList<>(memberByActivityId.keySet());
+
+        Specification<Activity> spec = Specification.where(ActivitySpecification.hasIds(activityIds))
+                .and(ActivitySpecification.hasEventId(eventId))
+                .and(ActivitySpecification.hasName(name))
+                .and(ActivitySpecification.hasStatus(status))
+                .and(ActivitySpecification.onDate(date));
+
+        List<Activity> activities = activityRepository.findAll(spec, Sort.by("startDatetime").ascending());
+
+        return activities.stream()
+                .map(activity -> {
+                    ActivityMember m = memberByActivityId.get(activity.getId());
                     AgendaItemResponse item = new AgendaItemResponse();
                     item.setActivityId(activity.getId());
                     item.setActivityTitle(activity.getTitle());
@@ -249,7 +275,6 @@ public class ActivityMemberService {
                     item.setConfirmationStatus(m.getConfirmationStatus());
                     return item;
                 })
-                .sorted((a, b) -> a.getStartDatetime().compareTo(b.getStartDatetime()))
                 .toList();
     }
 }

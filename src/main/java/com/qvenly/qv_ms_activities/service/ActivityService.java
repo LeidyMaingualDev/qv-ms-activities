@@ -13,12 +13,18 @@ import com.qvenly.qv_ms_activities.model.enums.AuditActionType;
 import com.qvenly.qv_ms_activities.model.enums.MemberStatus;
 import com.qvenly.qv_ms_activities.repository.ActivityMemberRepository;
 import com.qvenly.qv_ms_activities.repository.ActivityRepository;
+import com.qvenly.qv_ms_activities.specification.ActivitySpecification;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import java.time.LocalDate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @Slf4j
@@ -134,8 +140,13 @@ public class ActivityService {
         return toResponse(updated);
     }
 
-    public List<ActivityResponse> getActivitiesByEvent(Long eventId) {
-        return activityRepository.findByEventIdOrderByStartDatetimeAsc(eventId)
+    public List<ActivityResponse> getActivitiesByEvent(Long eventId, String name, LocalDate date, ActivityStatus status) {
+        Specification<Activity> spec = Specification.where(ActivitySpecification.hasEventId(eventId))
+                .and(ActivitySpecification.hasName(name))
+                .and(ActivitySpecification.hasStatus(status))
+                .and(ActivitySpecification.onDate(date));
+
+        return activityRepository.findAll(spec, Sort.by("startDatetime").ascending())
                 .stream().map(this::toResponse).toList();
     }
 

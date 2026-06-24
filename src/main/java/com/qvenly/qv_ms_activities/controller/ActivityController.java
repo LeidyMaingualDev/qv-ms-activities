@@ -7,14 +7,18 @@ import com.qvenly.qv_ms_activities.model.dto.response.ActivityResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AgendaItemResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ApiResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AuditLogResponse;
+import com.qvenly.qv_ms_activities.model.enums.ActivityStatus;
 import com.qvenly.qv_ms_activities.service.ActivityMemberService;
 import com.qvenly.qv_ms_activities.service.ActivityService;
 import com.qvenly.qv_ms_activities.service.AuditService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -36,8 +40,13 @@ public class ActivityController {
     }
 
     @GetMapping("/event/{eventId}")
-    public ResponseEntity<ApiResponse<List<ActivityResponse>>> getByEvent(@PathVariable Long eventId) {
-        return ResponseEntity.ok(ApiResponse.success("Actividades obtenidas.", activityService.getActivitiesByEvent(eventId)));
+    public ResponseEntity<ApiResponse<List<ActivityResponse>>> getByEvent(
+            @PathVariable Long eventId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) ActivityStatus status) {
+        return ResponseEntity.ok(ApiResponse.success("Actividades obtenidas.",
+                activityService.getActivitiesByEvent(eventId, name, date, status)));
     }
 
     @GetMapping("/{id}")
@@ -87,7 +96,12 @@ public class ActivityController {
 
     @GetMapping("/my-agenda")
     public ResponseEntity<ApiResponse<List<AgendaItemResponse>>> getMyAgenda(
-            @RequestHeader("X-User-Email") String userEmail) {
-        return ResponseEntity.ok(ApiResponse.success("Agenda obtenida.", activityMemberService.getMyAgenda(userEmail)));
+            @RequestHeader("X-User-Email") String userEmail,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Long eventId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) ActivityStatus status) {
+        return ResponseEntity.ok(ApiResponse.success("Agenda obtenida.",
+                activityMemberService.getMyAgenda(userEmail, name, eventId, date, status)));
     }
 }

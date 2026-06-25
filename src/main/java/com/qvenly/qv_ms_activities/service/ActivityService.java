@@ -114,6 +114,13 @@ public class ActivityService {
         if (a.getStatus() != ActivityStatus.PENDING) {
             throw new BusinessException("Solo se puede iniciar una actividad PENDING.", HttpStatus.CONFLICT);
         }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(a.getStartDatetime())) {
+            throw new BusinessException("No se puede iniciar la actividad antes de su fecha de inicio.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
+        if (now.isAfter(a.getEndDatetime())) {
+            throw new BusinessException("No se puede iniciar la actividad: su rango de fechas ya finalizó. Cancélala si no se realizó.", HttpStatus.UNPROCESSABLE_ENTITY);
+        }
         a.setStatus(ActivityStatus.IN_PROGRESS);
         Activity updated = activityRepository.save(a);
         auditService.log(id, a.getEventId(), AuditActionType.ACTIVITY_STARTED, performerEmail, null, "Actividad iniciada.");
@@ -126,6 +133,9 @@ public class ActivityService {
         eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
         if (a.getStatus() != ActivityStatus.IN_PROGRESS) {
             throw new BusinessException("Solo se puede finalizar una actividad IN_PROGRESS.", HttpStatus.CONFLICT);
+        }
+        if (LocalDateTime.now().isBefore(a.getStartDatetime())) {
+            throw new BusinessException("No se puede finalizar una actividad que aún no ha iniciado.", HttpStatus.UNPROCESSABLE_ENTITY);
         }
         a.setStatus(ActivityStatus.FINISHED);
         Activity updated = activityRepository.save(a);

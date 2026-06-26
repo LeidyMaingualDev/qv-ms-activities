@@ -104,13 +104,21 @@ public class ActivityService {
         Activity updated = activityRepository.save(a);
         auditService.log(id, a.getEventId(), AuditActionType.ACTIVITY_EDITED, performerEmail, null,
                 "Antes: " + before + " | Después: título='" + updated.getTitle() + "'");
+
+        memberRepository.findByActivityIdAndStatus(id, MemberStatus.ACTIVE)
+                .forEach(m -> notificationClient.sendActivityUpdated(
+                        m.getUserEmail(), null, null,
+                        updated.getTitle(), id, updated.getEventId(), null,
+                        "Antes: " + before + " | Después: título='" + updated.getTitle() + "'"
+                ));
+
         return toResponse(updated);
     }
 
     @Transactional
     public ActivityResponse startActivity(Long id, String performerEmail) {
         Activity a = findById(id);
-        eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
+        assertCanStartOrFinish(a, performerEmail);
         if (a.getStatus() != ActivityStatus.PENDING) {
             throw new BusinessException("Solo se puede iniciar una actividad PENDING.", HttpStatus.CONFLICT);
         }
@@ -130,7 +138,7 @@ public class ActivityService {
     @Transactional
     public ActivityResponse finishActivity(Long id, String performerEmail) {
         Activity a = findById(id);
-        eventAuthorizationService.assertIsOrganizer(a.getEventId(), performerEmail);
+        assertCanStartOrFinish(a, performerEmail);
         if (a.getStatus() != ActivityStatus.IN_PROGRESS) {
             throw new BusinessException("Solo se puede finalizar una actividad IN_PROGRESS.", HttpStatus.CONFLICT);
         }
@@ -210,5 +218,19 @@ public class ActivityService {
         r.setCurrentEnrollments((int) memberRepository.countByActivityIdAndEventRoleAndStatus(
                 a.getId(), ActivityMemberRole.ATTENDEE, MemberStatus.ACTIVE));
         return r;
+    }
+
+    private void assertCanStartOrFinish(Activity a, String performerEmail) {
+        String role = eventInternalClient.getMemberRole(a.getEventId(), performerEmail);
+        if ("ORGANIZER".equals(role)) return;
+        boolean isAssignedStaff = memberRepository
+                .findByActivityIdAndUserEmailAndEventRole(a.getId(), performerEmail, ActivityMemberRole.STAFF)
+                .filter(m -> m.getStatus() == MemberStatus.ACTIVE)
+                .isPresent();
+        if (!isAssignedStaff) {
+            throw new BusinessException(
+                    "Solo el organizador del evento o el personal de apoyo asignado a esta actividad puede realizar esta acción.",
+                    HttpStatus.FORBIDDEN);
+        }
     }
 }

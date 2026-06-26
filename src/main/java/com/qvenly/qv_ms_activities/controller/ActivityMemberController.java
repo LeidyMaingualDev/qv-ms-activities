@@ -4,8 +4,11 @@ import com.qvenly.qv_ms_activities.model.dto.request.AssignMemberRequest;
 import com.qvenly.qv_ms_activities.model.dto.request.CancelParticipationRequest;
 import com.qvenly.qv_ms_activities.model.dto.response.ActivityMemberResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ApiResponse;
+import com.qvenly.qv_ms_activities.model.entity.Activity;
 import com.qvenly.qv_ms_activities.model.enums.ActivityMemberRole;
 import com.qvenly.qv_ms_activities.service.ActivityMemberService;
+import com.qvenly.qv_ms_activities.service.ActivityService;
+import com.qvenly.qv_ms_activities.service.EventAuthorizationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,16 +22,32 @@ import java.util.List;
 public class ActivityMemberController {
 
     private final ActivityMemberService memberService;
+    private final ActivityService activityService;
+    private final EventAuthorizationService eventAuthorizationService;
 
     @GetMapping("/members")
     public ResponseEntity<ApiResponse<List<ActivityMemberResponse>>> getMembers(
             @PathVariable Long activityId,
-            @RequestParam(required = false) ActivityMemberRole role) {
+            @RequestParam(required = false) ActivityMemberRole role,
+            @RequestHeader("X-User-Email") String userEmail) {
+        Activity activity = activityService.findById(activityId);
+        eventAuthorizationService.assertIsOrganizer(activity.getEventId(), userEmail);
         List<ActivityMemberResponse> members = memberService.getMembersByActivity(activityId);
         if (role != null) {
             members = members.stream().filter(m -> m.getEventRole() == role).toList();
         }
         return ResponseEntity.ok(ApiResponse.success("Miembros obtenidos.", members));
+    }
+
+    @GetMapping("/members/me")
+    public ResponseEntity<ApiResponse<ActivityMemberResponse>> getMyAssignment(
+            @PathVariable Long activityId,
+            @RequestHeader("X-User-Email") String userEmail) {
+        ActivityMemberResponse my = memberService.getMembersByActivity(activityId).stream()
+                .filter(m -> m.getUserEmail().equalsIgnoreCase(userEmail))
+                .findFirst()
+                .orElse(null);
+        return ResponseEntity.ok(ApiResponse.success("Asignación obtenida.", my));
     }
 
     @PostMapping("/members")
@@ -69,5 +88,4 @@ public class ActivityMemberController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Inscripción realizada.", memberService.enrollSelf(activityId, userEmail)));
     }
-
 }

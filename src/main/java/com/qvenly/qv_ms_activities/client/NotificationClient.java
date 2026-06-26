@@ -37,7 +37,7 @@ public class NotificationClient {
         body.put("eventTitle",        eventTitle != null ? eventTitle : "");
         body.put("recipientEmail",    recipientEmail);
         body.put("recipientName",     recipientName != null ? recipientName : "");
-        body.put("recipientUserId",   recipientUserId != null ? recipientUserId : 0);
+        body.put("recipientUserId",   recipientUserId);
         body.put("detail",            role);
         body.put("activityDatetime",  activityDatetime != null ? activityDatetime : "");
         post("/api/notifications/activity-assigned", body);
@@ -56,9 +56,27 @@ public class NotificationClient {
         body.put("eventTitle",      eventTitle != null ? eventTitle : "");
         body.put("recipientEmail",  recipientEmail);
         body.put("recipientName",   recipientName != null ? recipientName : "");
-        body.put("recipientUserId", recipientUserId != null ? recipientUserId : 0);
+        body.put("recipientUserId", recipientUserId);
         body.put("detail",          reason != null ? reason : "");
         post("/api/notifications/activity-cancelled", body);
+    }
+
+    /** Actividad actualizada */
+    public void sendActivityUpdated(String recipientEmail, String recipientName,
+                                    Long recipientUserId, String activityTitle,
+                                    Long activityId, Long eventId, String eventTitle,
+                                    String detail) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type",            "ACTIVITY_UPDATED");
+        body.put("activityTitle",   activityTitle);
+        body.put("activityId",      activityId);
+        body.put("eventId",         eventId);
+        body.put("eventTitle",      eventTitle != null ? eventTitle : "");
+        body.put("recipientEmail",  recipientEmail);
+        body.put("recipientName",   recipientName != null ? recipientName : "");
+        body.put("recipientUserId", recipientUserId);
+        body.put("detail",          detail != null ? detail : "");
+        post("/api/notifications/activity-updated", body);
     }
 
     private void post(String uri, Object body) {

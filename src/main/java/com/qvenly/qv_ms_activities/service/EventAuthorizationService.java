@@ -33,6 +33,19 @@ public class EventAuthorizationService {
     }
 
     /**
+     * Verifica que la persona sea miembro activo del evento (cualquier rol:
+     * ORGANIZER, STAFF o MEMBER). Lanza 403 si no lo es.
+     */
+    public void assertIsActiveMember(Long eventId, String email) {
+        String role = eventInternalClient.getMemberRole(eventId, email);
+        if (role == null) {
+            throw new BusinessException(
+                    "No tienes acceso a esta actividad: no eres miembro de este evento.",
+                    HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /**
      * Valida que la persona a asignar pueda recibir el rol de actividad indicado,
      * según su rol dentro del evento:
      *   ORGANIZER → no puede asignarse a ninguna actividad

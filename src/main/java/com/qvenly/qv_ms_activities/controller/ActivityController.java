@@ -8,11 +8,13 @@ import com.qvenly.qv_ms_activities.model.dto.response.ActivityResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AgendaItemResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.ApiResponse;
 import com.qvenly.qv_ms_activities.model.dto.response.AuditLogResponse;
+import com.qvenly.qv_ms_activities.model.entity.Activity;
 import com.qvenly.qv_ms_activities.model.enums.ActivityStatus;
 import com.qvenly.qv_ms_activities.service.ActivityImageService;
 import com.qvenly.qv_ms_activities.service.ActivityMemberService;
 import com.qvenly.qv_ms_activities.service.ActivityService;
 import com.qvenly.qv_ms_activities.service.AuditService;
+import com.qvenly.qv_ms_activities.service.EventAuthorizationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -32,8 +34,8 @@ public class ActivityController {
     private final ActivityService activityService;
     private final AuditService auditService;
     private final ActivityImageService activityImageService;
-
     private final ActivityMemberService activityMemberService;
+    private final EventAuthorizationService eventAuthorizationService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ActivityResponse>> create(
@@ -54,8 +56,12 @@ public class ActivityController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ActivityResponse>> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Actividad obtenida.", activityService.getActivityById(id)));
+    public ResponseEntity<ApiResponse<ActivityResponse>> getById(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Email") String userEmail) {
+        Activity activity = activityService.findById(id);
+        eventAuthorizationService.assertIsActiveMember(activity.getEventId(), userEmail);
+        return ResponseEntity.ok(ApiResponse.success("Actividad obtenida.", activityService.toResponse(activity)));
     }
 
     @PutMapping("/{id}")
@@ -87,7 +93,11 @@ public class ActivityController {
     }
 
     @GetMapping("/{id}/audit")
-    public ResponseEntity<ApiResponse<List<AuditLogResponse>>> getAudit(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<List<AuditLogResponse>>> getAudit(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Email") String userEmail) {
+        Activity activity = activityService.findById(id);
+        eventAuthorizationService.assertIsOrganizer(activity.getEventId(), userEmail);
         return ResponseEntity.ok(ApiResponse.success("Auditoría obtenida.", auditService.getAuditLog(id)));
     }
 
@@ -120,7 +130,10 @@ public class ActivityController {
 
     @GetMapping("/{id}/images")
     public ResponseEntity<ApiResponse<List<ActivityImageResponse>>> getImages(
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @RequestHeader("X-User-Email") String userEmail) {
+        Activity activity = activityService.findById(id);
+        eventAuthorizationService.assertIsActiveMember(activity.getEventId(), userEmail);
         return ResponseEntity.ok(ApiResponse.success("Imágenes obtenidas.",
                 activityImageService.getImagesByActivity(id)));
     }

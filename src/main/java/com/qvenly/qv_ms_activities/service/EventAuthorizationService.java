@@ -76,9 +76,9 @@ public class EventAuthorizationService {
             }
 
             case "MEMBER" -> {
-                if (activityRole != ActivityMemberRole.PARTICIPANT && activityRole != ActivityMemberRole.JUDGE) {
+                if (activityRole != ActivityMemberRole.PARTICIPANT) {
                     throw new BusinessException(
-                            "Un miembro solo puede asignarse como PARTICIPANT o JUDGE.",
+                            "Un miembro solo puede asignarse como PARTICIPANT.",
                             HttpStatus.UNPROCESSABLE_ENTITY);
                 }
             }
